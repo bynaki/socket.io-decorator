@@ -1,0 +1,55 @@
+{
+  "name": "socket.io-decorator",
+  "version": "0.1.0",
+  "description": "Socket.IO with Decorator",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "author": {
+    "name": "bynaki",
+    "email": "bynaki@icloud.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bynaki/socket.io-decorator.git"
+  },
+  "license": "MIT",
+  "config": {
+    "srcMain": "src/index.ts"
+  },
+  "scripts": {
+    "name": "echo $npm_package_name",
+    "start": "node .",
+    "dev": "npm run build.tsc && npm start",
+    "build.tsc": "tsc && bin/copy \"src/**/!(*.ts)\" \"dist\"",
+    "build.parcel": "parcel build --target=node \"$npm_package_config_srcMain\" && bin/copy \"src/**/!(*.ts)\" \"dist\"",
+    "clean": "rimraf dist",
+    "build.util": "tsc --outDir utils utils/index.ts",
+    "build.test": "tsc -p tsconfig.test.json && bin/copy \"src/**/!(*.ts)\" \"dist.test/src\"",
+    "test": "npm run build.test && ava",
+    "test.watch": "npm run build.test && ava --watch",
+    "clean.test": "rimraf dist.test"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^5.0.1",
+    "@types/glob": "^5.0.35",
+    "@types/socket.io": "^1.4.32",
+    "@types/socket.io-client": "^1.4.32",
+    "ava": "^0.25.0",
+    "fourdollar.promisify": "^1.0.5",
+    "fs-extra": "^5.0.0",
+    "glob": "^7.1.2",
+    "parcel-bundler": "^1.6.2",
+    "rimraf": "^2.6.2",
+    "socket.io-client": "^2.0.4",
+    "typescript": "^2.7.2",
+    "jsonwebtoken": "^8.2.0"
+  },
+  "dependencies": {
+    "socket.io": "^2.0.4"
+  },
+  "ava": {
+    "files": [
+      "dist.test/**/**.spec.js"
+    ]
+  }
+}

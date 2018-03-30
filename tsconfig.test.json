@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "dist.test",
+    "target": "es6",
+    "sourceMap": true,
+    "declaration": true,
+    "noImplicitAny": false,
+    "experimentalDecorators": true
+  },
+  "include": [
+    "test/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    ".git"
+  ]
+}
