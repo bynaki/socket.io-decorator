@@ -30,22 +30,23 @@
     "clean.test": "rimraf dist.test"
   },
   "devDependencies": {
-    "@types/fs-extra": "^5.0.1",
+    "@types/fs-extra": "^5.0.2",
     "@types/glob": "^5.0.35",
-    "@types/socket.io": "^1.4.32",
+    "@types/socket.io": "^1.4.33",
     "@types/socket.io-client": "^1.4.32",
     "ava": "^0.25.0",
     "fourdollar.promisify": "^1.0.5",
     "fs-extra": "^5.0.0",
     "glob": "^7.1.2",
-    "parcel-bundler": "^1.6.2",
+    "jsonwebtoken": "^8.2.1",
+    "parcel-bundler": "^1.7.1",
     "rimraf": "^2.6.2",
-    "socket.io-client": "^2.0.4",
-    "typescript": "^2.7.2",
-    "jsonwebtoken": "^8.2.0"
+    "socket.io-client": "^2.1.0",
+    "stop.js": "^0.2.3",
+    "typescript": "^2.8.1"
   },
   "dependencies": {
-    "socket.io": "^2.0.4"
+    "socket.io": "^2.1.0"
   },
   "ava": {
     "files": [
