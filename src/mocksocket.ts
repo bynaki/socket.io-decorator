@@ -1,269 +1,183 @@
-/**
- * MockSocket
- */
-
-import * as stop from 'stop.js'
 import {
-  BaseSocket,
+  BaseNamespace,
   On,
   Use,
-  Middleware,
+  OnConnection,
+  NamespaceMiddleware,
+  Socket,
+  SocketWrapper,
 } from './'
-import * as jwt from 'jsonwebtoken'
-import cf from '../src/config'
 
 
-function auth(certified = {}): Middleware {
-  const valids = Object.keys(certified).filter(key => certified[key])
-  return (packet, next, ctx: MockSocket) => {
-    if(typeof ctx.decoded === 'string') {
-      next(new Error('Unauthorized: ' + ctx.decoded))
-      return
+function level(level: string): SocketWrapper {
+  return (socket, args, next) => {
+    switch(level) {
+      case 'level01': {
+        if(socket['token'] === 'level01' || socket['token'] === 'level02') {
+          break
+        }
+      }
+      case 'level02': {
+        if(socket['token'] === 'level02') {
+          break
+        }
+      }
+      default: {
+        throw new Error('denied')
+      }
     }
-    const truly = valids.every(v => ctx.decoded[v])
-    if(truly) {
-      next()
-    } else {
-      next(new Error('Unauthorized: denied'))
-    }
+    next()
   }
 }
 
-@Use(-1, (packet, next) => {
-  if(packet[0] === ':using-index') {
-    packet.push(0)
+const errorWrapper = On.wrap(async (socket, args, next) => {
+  const ack = (typeof args[args.length - 1] === 'function')? args[args.length - 1] : null
+  try {
+    await next()
+    // ack && ack('ok')
+  } catch(err) {
+    ack && ack('error: ' + err.message)
   }
-  next()
 })
-@Use((packet, next) => {
-  if(packet[0] === ':using-index') {
-    packet.push(2)
-  }
-  next()
-})
-@Use((packet, next) => {
-  if(packet[0] === ':using-order') {
-    packet.push(3)
-  }
-  next()
-})
-@Use((packet, next) => {
-  if(packet[0] === ':using-order') {
-    packet.push(2)
-  }
-  next()
-})
-export default class MockSocket extends BaseSocket {
-  nth: number
-  beforeMsg: string
-  readonly decoded: any
 
-  constructor(socket) {
-    super(socket)
-    this.send('I am a MockSocket.')
-    this.nth = 1
-    this.beforeMsg = 'before say hello'
+const OnWrapped = errorWrapper.on()
+const OnLevel01 = errorWrapper.next(level('level01')).on()
+const OnLevel02 = errorWrapper.next(level('level02')).on()
 
-    // read the token from header of url
-    const token = this.handshake.headers['x-access-token'] || this.handshake.query.token
-    // token does not exist
-    if(!token) {
-      return
-    }
-    try {
-      // create a promise that decodes the token
-      const decoded = jwt.verify(token, cf.jwt.secret)
-      if(decoded.iss !== cf.jwt.options.issuer 
-        || decoded.sub !== cf.jwt.options.subject) {
-          throw new Error('The wrong token.')
-      }
-      let now = Date.now()
-      now = (now - now % 1000) / 1000
-      if (!(now >= decoded.iat && now <= decoded.exp)) {
-        throw new Error('The authentication has expired.')
-      }
-      this.decoded = decoded
-    } catch(err) {
-      // if it has failed to verify, it will return an error message
-      this.decoded = err.message
-      // throw new Error('Unauthorized: ' + err.message)
-    } 
+function track(socket: Socket, index: string) {
+  const track: string[]= socket['track'] || []
+  track.push(index)
+  socket['track'] = track
+}
+
+
+@Use(0, (socket, next, ctx) => {
+  track(socket, 'use00')
+  next()
+})
+// use는 socket이 처음 connect 될때만 한번 실행 된다.
+@Use((socket, next, ctx) => {
+  const token = socket.handshake.headers['token'] || []
+  if(token === 'bed token') {
+    next(new Error('error: bed token'))
+    return
+  }
+  socket['token'] = token
+  // track
+  track(socket, 'use04')
+  next()
+})
+@Use((socket, next, ctx) => {
+  track(socket, 'use03')
+  next()
+})
+export class MockSocket extends BaseNamespace {
+  sayHello = 'Hello in mock'
+  constructor(namespace) {
+    super(namespace)
+    setInterval(() => {
+      this.to('level01').emit(':auth.level01', 'level01')
+    }, 200)
+    setInterval(() => {
+      this.to('level02').emit(':auth.level02', 'level02')
+    }, 200)
   }
 
-  // get decoded() {
-  //   return this._decoded
-  // }
+  @OnConnection()
+  onConnect(socket: Socket) {
+    socket.send(this.sayHello)
+  }
 
   @Use()
-  use01(packet: any[], next: (err?: Error) => void) {
-    if(packet[0] === ':using-order') {
-      packet.push(0)
-    }
+  use01(socket: Socket, next: (err?: Error) => void, ctx: MockSocket) {
+    track(socket, 'use01')
     next()
   }
 
   @Use()
-  use02(packet: any[], next: (err?: Error) => void) {
-    if(packet[0] === ':using-order') {
-      packet.push(this.nth)  // 1
-    }
+  use02(socket: Socket, next: (err?: Error) => void, ctx: MockSocket) {
+    track(socket, 'use02')
     next()
   }
 
   @Use(101)
-  use03(packet: any[], next: (err?: Error) => void) {
-    if(packet[0] === ':using-index') {
-      packet.push(3)
-    }
-    next()
-  }
-
-  @Use(10)
-  use04(packet: any[], next: (err?: Error) => void) {
-    if(packet[0] === ':using-index') {
-      packet.push(this.nth)  // 1
-    }
+  use03(socket: Socket, next: (err?: Error) => void, ctx: MockSocket) {
+    track(socket, 'use05')
     next()
   }
 
   @On(':echo')
-  hello(...args: any[]) {
-    this.emit(':echo', ...args)
+  echo(socket: Socket, ...args: any[]) {
+    socket.emit(':echo', ...args)
   }
 
-  @On('disconnect')
-  disconnect(reason) {
-    MockSocket.socketList.forEach(socket => {
-      socket.emit(':disconnect', reason)
-    })
-  }
-
-  @On(':using-order')
-  usingOrder(...args: any[]) {
-    this.emit(':using-order', ...args)
-  }
-
-  @On(':using-index')
-  usingIndex(...args: any[]) {
-    this.emit(':using-index', ...args)
-  }
-
-  @On(':before01', (packet, next) => {
-    packet.push('before01')
-    next()
-  })
-  after01(...args: any[]) {
-    this.emit(':before01', ...args)
-  }
-
-  @On(':before02', 'before02')
-  after02(...args: any[]) {
-    this.emit(':before02', ...args)
-  }
-
-  before02(packet: any[], next: (err?: Error) => void) {
-    packet.push(this.beforeMsg)
-    next()
-  }
-
-  @On(':before03', (packet, next, ctx) => {
-    packet.push(1)
-    ctx.emit(':before03.1')
-    next()
-    packet.push(4)
-    ctx.emit(':before03.4')
-  }, async (packet, next, ctx) => {
-    packet.push(2)
-    ctx.emit(':before03.2')
-    next()
-    packet.push(3)
-    ctx.emit(':before03.3')
-  })
-  after03(...args: any[]) {
-    args.push(5)
-    this.emit(':before03', ...args)
-  }
-
-  @On(':before04', async (packet, next, ctx) => {
-    await stop(500)
-    packet.push(1)
-    ctx.emit(':before04.1')
-    await next()
-    packet.push(5)
-    ctx.emit(':before04.4')
-  }, async (packet, next, ctx) => {
-    await stop(200)
-    packet.push(2)
-    ctx.emit(':before04.2')
-    await next()
-    await stop(100)
-    packet.push(4)
-    ctx.emit(':before04.3')
-  })
-  after04(...args: any[]) {
-    args.push(3)
-    this.emit(':before04', ...args)
-  }
-
-  @Use()
-  errorUse(packet: any[], next: (err?: Error) => void) {
-    if(packet[0] === ':error.use') {
-      next(new Error('this is error through next() in @Use()'))
-      return
+  @OnWrapped(':ack')
+  ack(socket: Socket, echo: string, ack: (echo: string) => void) {
+    if(echo === 'error') {
+      throw new Error('error')
     }
-    next()
+    ack(echo)
   }
 
-  @Use()
-  errorUse2(packet: any[], next: (err?: Error) => void) {
-    if(packet[0] === ':error.use2') {
-      // 매우 위험하다.
-      throw new Error('this is error to be threw in @Use()')
+  @OnWrapped(':ack.async')
+  async asyncAck(socket: Socket, echo: string, ack: (echo: string) => void) {
+    const res = await mockAsync(echo)
+    ack(res[0])
+  }
+
+  @On(':use.order')
+  order(socket: Socket, ack: (...track: string[]) => void) {
+    return ack(...socket['track'])
+  }
+
+  @OnLevel01(':auth.level01')
+  allowLevel01(socket: Socket, onoff: string, ack?: (msg: string) => void) {
+    switch(onoff) {
+      case 'on': {
+        socket.join('level01')
+        ack && ack('ok')
+        break
+      }
+      case 'off': {
+        socket.leave('level01')
+        ack && ack('ok')
+        break
+      }
+      default: {
+        throw new Error('bed query')
+      }
     }
-    next()
   }
 
-  @On(':error.before', (packet, next) => {
-    next(new Error('this is error through next() in before() in @On(event, before)'))
+  @OnLevel02(':auth.level02')
+  allowLevel02(socket: Socket, onoff: string, ack?: (msg: string) => void) {
+    this.allowLevel01(socket, onoff)
+    switch(onoff) {
+      case 'on': {
+        socket.join('level02')
+        ack && ack('ok')
+        break
+      }
+      case 'off': {
+        socket.leave('level02')
+        ack && ack('ok')
+        break
+      }
+      default: {
+        throw new Error('bed query')
+      }
+    }
+  }
+}
+
+function mockAsync(...args: any[]): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    process.nextTick((...args: any[]) => {
+      if(args[0] === 'error') {
+        reject(new Error('error'))
+        return
+      }
+      resolve(args)
+    }, ...args)
   })
-  errorBefore(...args: any[]) {
-    this.emit(':error.before', 'it must not be able to see this')
-  }
-
-  @On(':error.on')
-  errorOn() {
-    throw new Error('this is error in @On')
-  }
-
-  @On('error')
-  error(err) {
-    this.emit(':error', err.message)
-  }
-
-  @On(':query', (packet, next, ctx) => {
-    packet.push(ctx.handshake.query.password)
-    packet.push(ctx.handshake.query.id)
-    next()
-  })
-  query(...args: any[]) {
-    this.emit(':query', ...args)
-  }
-
-  @On(':header', (packet, next, ctx) => {
-    packet.push(ctx.handshake.headers.token)
-    next()
-  })
-  header(...args: any[]) {
-    this.emit(':header', ...args)
-  }
-
-  @On(':auth.read', auth({read: true, write: false}))
-  authRead(...args: any[]) {
-    this.emit(':auth.read', 'OK')
-  }
-
-  @On(':auth.write', auth({read: true, write: true}))
-  authWrite(...args: any[]) {
-    this.emit(':auth.write', 'OK')
-  }
 }
