@@ -3,7 +3,7 @@ import {
   On,
   Use,
   OnConnection,
-  NamespaceMiddleware,
+  Middleware,
   Socket,
   SocketWrapper,
 } from './'

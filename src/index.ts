@@ -6,13 +6,13 @@ import {
 
 
 export {Server, Namespace, Socket}
-export type NamespaceMiddleware = (socket: Socket, next: (err?: Error) => void, ctx?: BaseNamespace) => Promise<void>|void
+export type Middleware = (socket: Socket, next: (err?: Error) => void, ctx?: BaseNamespace) => Promise<void>|void
 // export type SocketMiddleware = (packet: any[], next: (err?: Error) => void, ctx?: Socket) => Promise<void>|void
 // export type SocketHandler = (socket: Socket, ...args: any[]) => Promise<void>|void
 export type SocketWrapper = (socket: Socket, args: any[], next: () => Promise<void>|void) => Promise<void>|void
 
 export class BaseNamespace {
-  private _useList: {callback: NamespaceMiddleware|string, index: number}[]
+  private _useList: {callback: Middleware|string, index: number}[]
   private _onList: {event: string, callback: string , wrappers?: SocketWrapper[]}[] 
   // private _preBefores: {[index: string]: SocketMiddleware[]}
   // private _befores: {[index: string]: SocketMiddleware}
@@ -24,7 +24,7 @@ export class BaseNamespace {
     this._useList.sort((a, b) => {
       return a.index - b.index
     }).forEach(use => {
-      const callback: NamespaceMiddleware = (typeof use.callback === 'function')
+      const callback: Middleware = (typeof use.callback === 'function')
         ? use.callback : this[use.callback].bind(this)
       namespace.use((socket, next) => callback(socket, next, this))
     })
@@ -120,8 +120,8 @@ export class BaseNamespace {
 
 export function Use(): (target: any, name: string, descriptor: PropertyDescriptor) => void
 export function Use(index: number): (target: any, name: string, descriptor: PropertyDescriptor) => void
-export function Use(middleware: NamespaceMiddleware): (target: any) => void
-export function Use(index: number, middleware: NamespaceMiddleware): (target: any) => void
+export function Use(middleware: Middleware): (target: any) => void
+export function Use(index: number, middleware: Middleware): (target: any) => void
 export function Use(a?, b?) {
   if(typeof a !== 'number') {
     b = a
