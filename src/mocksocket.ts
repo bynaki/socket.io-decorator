@@ -26,23 +26,33 @@ function level(level: string): SocketWrapper {
         throw new Error('denied')
       }
     }
-    next()
+    return next()
   }
 }
 
-const errorWrapper = On.wrap(async (socket, args, next) => {
-  const ack = (typeof args[args.length - 1] === 'function')? args[args.length - 1] : null
+const OnWrapped = On.next(async (socket, args, next) => {
   try {
     await next()
-    // ack && ack('ok')
-  } catch(err) {
-    ack && ack('error: ' + err.message)
+  } catch(e) {
+    const ack = args[args.length - 1]
+    if(typeof ack === 'function') {
+      const err: Error = e
+      ack({
+        message: err.message,
+        name: err.name,
+        stack: err.stack,
+      })
+    }
   }
-})
-
-const OnWrapped = errorWrapper.on()
-const OnLevel01 = errorWrapper.next(level('level01')).on()
-const OnLevel02 = errorWrapper.next(level('level02')).on()
+}).next(async (socket, args, next) => {
+  const res = await next()
+  const ack = args[args.length - 1]
+  if(typeof ack === 'function') {
+    ack(null, res)
+  }
+}).on()
+const OnLevel01 = OnWrapped.next(level('level01')).on()
+const OnLevel02 = OnWrapped.next(level('level02')).on()
 
 function track(socket: Socket, index: string) {
   const track: string[]= socket['track'] || []
@@ -51,15 +61,15 @@ function track(socket: Socket, index: string) {
 }
 
 
+// use는 socket이 처음 connect 될때만 한번 실행 된다.
 @Use(0, (socket, next, ctx) => {
   track(socket, 'use00')
   next()
 })
-// use는 socket이 처음 connect 될때만 한번 실행 된다.
 @Use((socket, next, ctx) => {
   const token = socket.handshake.headers['token'] || []
   if(token === 'bed token') {
-    next(new Error('error: bed token'))
+    next(new Error('bed token'))
     return
   }
   socket['token'] = token
@@ -112,36 +122,34 @@ export class MockSocket extends BaseNamespace {
   }
 
   @OnWrapped(':ack')
-  ack(socket: Socket, echo: string, ack: (echo: string) => void) {
+  ack(socket: Socket, echo: string) {
     if(echo === 'error') {
       throw new Error('error')
     }
-    ack(echo)
+    return echo
   }
 
   @OnWrapped(':ack.async')
-  async asyncAck(socket: Socket, echo: string, ack: (echo: string) => void) {
+  async asyncAck(socket: Socket, echo: string) {
     const res = await mockAsync(echo)
-    ack(res[0])
+    return res[0]
   }
 
   @On(':use.order')
-  order(socket: Socket, ack: (...track: string[]) => void) {
-    return ack(...socket['track'])
+  order(socket: Socket, ack: (err: Error, ...track: string[]) => void) {
+    return ack(null, ...socket['track'])
   }
 
   @OnLevel01(':auth.level01')
-  allowLevel01(socket: Socket, onoff: string, ack?: (msg: string) => void) {
+  allowLevel01(socket: Socket, onoff: string) {
     switch(onoff) {
       case 'on': {
         socket.join('level01')
-        ack && ack('ok')
-        break
+        return 'ok'
       }
       case 'off': {
         socket.leave('level01')
-        ack && ack('ok')
-        break
+        return 'ok'
       }
       default: {
         throw new Error('bed query')
@@ -150,23 +158,26 @@ export class MockSocket extends BaseNamespace {
   }
 
   @OnLevel02(':auth.level02')
-  allowLevel02(socket: Socket, onoff: string, ack?: (msg: string) => void) {
+  allowLevel02(socket: Socket, onoff: string) {
     this.allowLevel01(socket, onoff)
     switch(onoff) {
       case 'on': {
         socket.join('level02')
-        ack && ack('ok')
-        break
+        return 'ok'
       }
       case 'off': {
         socket.leave('level02')
-        ack && ack('ok')
-        break
+        return 'ok'
       }
       default: {
         throw new Error('bed query')
       }
     }
+  }
+
+  @OnWrapped('*')
+  notFound() {
+    throw new Error('not found event')
   }
 }
 
