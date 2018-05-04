@@ -25,9 +25,12 @@ test.cb('namespace is /mock', t => {
   })
   socket.on('message', msg => {
     t.is(connected, true)
-    t.is(msg, 'Hello in mock')
-    t.end()
-    socket.close()
+    if(msg ==='Hello again') {
+      t.end()
+      socket.close()
+    } else {
+      t.is(msg, 'Hello in mock')
+    }
   })
 })
 
@@ -208,13 +211,13 @@ test.cb('error > in @Use()', t => {
     transportOptions: {
       polling: {
         extraHeaders: {
-          token: 'bed token',
+          token: 'bad token',
         },
       },
     },
   })
   socket.on('error', (err: string) => {
-    t.is(err, 'bed token')
+    t.is(err, 'bad token')
     socket.close()
     t.end()
   })
@@ -257,4 +260,16 @@ test.cb('error > not found', t => {
     socket.close()
     t.end()
   })
+})
+
+test('error > not found & async', async t => {
+  const socket = Socket('http://localhost:8110/mock')
+  try {
+    const res = await p(socket.emit, socket)(':notfound')
+    t.fail()
+  } catch(err) {
+    t.is(err.message, 'not found event')
+  } finally {
+    socket.close()
+  }
 })

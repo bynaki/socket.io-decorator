@@ -2,10 +2,11 @@ import {
   BaseNamespace,
   On,
   Use,
-  OnConnection,
+  OnConnect,
   Middleware,
-  Socket,
   SocketWrapper,
+  Socket,
+  OnDisconnect,
 } from './'
 
 
@@ -68,8 +69,8 @@ function track(socket: Socket, index: string) {
 })
 @Use((socket, next, ctx) => {
   const token = socket.handshake.headers['token'] || []
-  if(token === 'bed token') {
-    next(new Error('bed token'))
+  if(token === 'bad token') {
+    next(new Error('bad token'))
     return
   }
   socket['token'] = token
@@ -81,8 +82,14 @@ function track(socket: Socket, index: string) {
   track(socket, 'use03')
   next()
 })
+
+@OnConnect((socket, ctx: MockSocket) => {
+  socket.send(ctx.sayHello2)
+})
 export class MockSocket extends BaseNamespace {
   sayHello = 'Hello in mock'
+  sayHello2 = 'Hello again'
+
   constructor(namespace) {
     super(namespace)
     setInterval(() => {
@@ -93,9 +100,14 @@ export class MockSocket extends BaseNamespace {
     }, 200)
   }
 
-  @OnConnection()
-  onConnect(socket: Socket) {
+  @OnConnect()
+  onConnect(socket: Socket, ctx: MockSocket) {
     socket.send(this.sayHello)
+  }
+
+  @OnDisconnect()
+  OnDisconnect(reason: string, socketId: string, ctx: MockSocket) {
+    console.log('reason: ', reason, socketId)
   }
 
   @Use()
