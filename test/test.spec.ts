@@ -73,7 +73,7 @@ test.cb('ack > async', t => {
   })
 })
 
-test('ack > async', async t => {
+test('ack > async2', async t => {
   const socket = Socket('http://localhost:8110/mock')
   const msg = await p(socket.emit, socket)(':ack', 'Hello World!!')
   t.is(msg, 'Hello World!!')
