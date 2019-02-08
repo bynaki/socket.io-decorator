@@ -3,6 +3,10 @@ import {
   Namespace,
   Socket,
 } from 'socket.io'
+import {
+  snakeCase,
+} from 'lodash' 
+import { on } from 'cluster';
 
 
 export {Server, Namespace, Socket}
@@ -14,16 +18,45 @@ export type ClassDecoratorType = (target: any, name: string, descriptor: Propert
 export type MethodDecoratorType = (target: any) => void
 
 
+type OnCollection = {
+  useList: {callback: Middleware|string, index: number}[]
+  onList: {event: string, callback: string , wrappers?: SocketWrapper[]}[]
+  onconnectList: (ConnectCallback | string)[]
+  ondisconnectList: (DisconnectCallback | string)[]
+}
+
+const onCollections: {
+  [className: string]: OnCollection
+} = {}
+
+
+function initOnCollection(name: string): OnCollection {
+  if(!onCollections[name]) {
+    onCollections[name] = newOnCollection()
+  }
+  return onCollections[name]
+}
+
+function newOnCollection(): OnCollection {
+  return {
+    useList: [],
+    onList: [],
+    onconnectList: [],
+    ondisconnectList: [],
+  }
+}
+
 export class BaseNamespace {
-  private _useList: {callback: Middleware|string, index: number}[]
-  private _onList: {event: string, callback: string , wrappers?: SocketWrapper[]}[] 
-  private _onconnectList: (ConnectCallback | string)[]
-  private _ondisconnectList: (DisconnectCallback | string)[]
+  // private _useList: {callback: Middleware|string, index: number}[]
+  // private _onList: {event: string, callback: string , wrappers?: SocketWrapper[]}[] 
+  // private _onconnectList: (ConnectCallback | string)[]
+  // private _ondisconnectList: (DisconnectCallback | string)[]
 
   constructor(readonly namespace: Namespace) {
+    const ons = this._inheritOnCollection()
+
     // init uses
-    this._useList || (this._useList = [])
-    this._useList.sort((a, b) => {
+    ons.useList.sort((a, b) => {
       return a.index - b.index
     }).forEach(use => {
       const callback: Middleware = (typeof use.callback === 'function')
@@ -32,9 +65,8 @@ export class BaseNamespace {
     })
 
     // init each socket
-    this._onList || (this._onList = [])
     this.namespace.on('connect', socket => {
-      this._onList.forEach(on => {
+      ons.onList.forEach(on => {
         const callback: (socket: Socket, ...args: any[]) => Promise<any>|any = this[on.callback].bind(this)
         if(on.wrappers.length !== 0) {
           socket.on(on.event, (...args) => {
@@ -57,8 +89,7 @@ export class BaseNamespace {
     })
 
     // init onconnect
-    this._onconnectList = this._onconnectList || []
-    this._onconnectList.forEach(callback => {
+    ons.onconnectList.forEach(callback => {
       if(typeof callback === 'function') {
         this.namespace.on('connect', socket => {
           callback(socket, this)
@@ -71,9 +102,8 @@ export class BaseNamespace {
     })
 
     // init ondisconnect
-    this._ondisconnectList = this._ondisconnectList || []
     this.namespace.on('connection', socket => {
-      this._ondisconnectList.forEach(callback => {
+      ons.ondisconnectList.forEach(callback => {
         if(typeof callback === 'function') {
           socket.on('disconnect', reason => {
             callback(reason, socket.id, this)
@@ -100,7 +130,68 @@ export class BaseNamespace {
     return this
   }
   in = BaseNamespace.prototype.to
+
+  public _getSupers(): string[] {
+    const ss: string[] = []
+    let sp = this['__proto__']
+    while(sp) {
+      ss.push(sp.constructor.name)
+      sp = sp['__proto__']
+    }
+    return ss
+  }
+
+  private _inheritOnCollection(): OnCollection {
+    const supers = this._getSupers().slice(0, -1)
+    const inherited = newOnCollection()
+    supers.forEach(s => {
+      const collec = initOnCollection(s)
+      collec.onList.forEach(on => {
+        if(inherited.onList.find(o => o.event === on.event || o.callback === on.callback)) {
+          if(inherited.onList.find(o => o.event !== on.event && o.callback === on.callback)) {
+            throw Error('상속 클래스 상호간에 충돌이 있다: 같은 callback이 서로 다른 event에 호출 될 수 없다.')
+          }
+          if(inherited.onList.find(o => o.event === on.event && o.callback !== on.callback)) {
+            inherited.onList.push(on)
+          } else {
+            // if(o.event === on.event && o.callback === on.callback)면 무시
+          }
+        } else {
+          inherited.onList.push(on)
+        }
+      })
+      collec.useList.forEach(use => {
+        if(typeof use.callback === 'string') {
+          if(!inherited.useList.find(u => u.callback === use.callback)) {
+            inherited.useList.push(use)
+          }
+        } else {
+          inherited.useList.push(use)
+        }
+      })
+      collec.onconnectList.forEach(on => {
+        if(typeof on === 'string') {
+          if(!inherited.onconnectList.find(o => o === on)) {
+            inherited.onconnectList.push(on)
+          }
+        } else {
+          inherited.onconnectList.push(on)
+        }
+      })
+      collec.ondisconnectList.forEach(on => {
+        if(typeof on === 'string') {
+          if(!inherited.ondisconnectList.find(o => o === on)) {
+            inherited.ondisconnectList.push(on)
+          }
+        } else {
+          inherited.ondisconnectList.push(on)
+        }
+      })
+    })
+    return inherited
+  }
 }
+
 
 export function Use(): (target: any, name: string, descriptor: PropertyDescriptor) => void
 export function Use(index: number): (target: any, name: string, descriptor: PropertyDescriptor) => void
@@ -113,13 +204,13 @@ export function Use(a?, b?) {
   }
   if(typeof b === 'function') {
     return (target: any) => {
-      target.prototype._useList || (target.prototype._useList = [])
-      target.prototype._useList.push({callback: b, index: a})
+      const inited = initOnCollection(target.prototype.constructor.name)
+      inited.useList.push({callback: b, index: a})
     }
   } else {
     return (target: any, name: string, descriptor: PropertyDescriptor) => {
-      target._useList || (target._useList = [])
-      target._useList.push({callback: name, index: a})
+      const inited = initOnCollection(target.constructor.name)
+      inited.useList.push({callback: name, index: a})
     }
   }
 }
@@ -129,13 +220,13 @@ export function OnConnect(callback: ConnectCallback): MethodDecoratorType
 export function OnConnect(callback?: ConnectCallback) {
   if(callback) {
     return (target: any) => {
-      target.prototype._onconnectList = target.prototype._onconnectList || []
-      target.prototype._onconnectList.push(callback)
+      const inited = initOnCollection(target.prototype.constructor.name)
+      inited.onconnectList.push(callback)
     }
   } else {
     return (target: any, name: string, descriptor: PropertyDescriptor) => {
-      target._onconnectList = target._onconnectList || []
-      target._onconnectList.push(name)
+      const inited = initOnCollection(target.constructor.name)
+      inited.onconnectList.push(name)
     }
   }
 }
@@ -145,13 +236,13 @@ export function OnDisconnect(callback: DisconnectCallback): MethodDecoratorType
 export function OnDisconnect(callback?: DisconnectCallback) {
   if(callback) {
     return (target: any) => {
-      target.prototype._ondisconnectList = target.prototype._ondisconnectList || []
-      target.prototype._ondisconnectList.push(callback)
+      const inited = initOnCollection(target.prototype.constructor.name)
+      inited.ondisconnectList.push(callback)
     }
   } else {
     return (target: any, name: string, descriptor: PropertyDescriptor) => {
-      target._ondisconnectList = target._ondisconnectList || []
-      target._ondisconnectList.push(name)
+      const inited = initOnCollection(target.constructor.name)
+      inited.ondisconnectList.push(name)
     }
   }
 }
@@ -172,8 +263,9 @@ export class Wrapper {
   } {
     const on = (event: string) => {
       return (target: any, callback: string, descriptor: PropertyDescriptor) => {
-        target._onList = target._onList || []
-        target._onList.push({
+        const name = target.constructor.name
+        const inited = initOnCollection(target.constructor.name)
+        inited.onList.push({
           event,
           callback,
           wrappers: this._wraps

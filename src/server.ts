@@ -1,9 +1,9 @@
 import * as IO from 'socket.io'
 import {
-  MockSocket,
-} from './mocksocket'
+  MockSpace,
+} from './mock'
 
 
 const port = 8110
 const io = IO(port)
-const mock = new MockSocket(io.of('mock'))
+const mock = new MockSpace(io.of('mock'))

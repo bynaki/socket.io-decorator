@@ -6,36 +6,49 @@ import test from 'ava'
 import * as IO from 'socket.io'
 import * as Socket from 'socket.io-client'
 import {
-  MockSocket,
-} from '../src/mocksocket'
+  MockSpace,
+  ErrorWithStatusCode,
+} from '../src/mock'
+import {
+  Mock2Space,
+} from '../src/mock2'
 import p from 'fourdollar.promisify'
+import {
+  sign
+} from 'jsonwebtoken'
+import * as cf from '../src/config'
 
-const io = IO(8110)
-const mock = new MockSocket(io.of('mock'))
+const io = IO(8110, {
+  path: '/test',
+})
+const mock2 = new Mock2Space(io.of('mock2'))
+const mock = new MockSpace(io.of('mock'))
 
 test.after(() => {
+  console.log('closed!!!!!!!!!!!!!!!!!!!!!')
   io.close()
 })
 
-test.cb('namespace is /mock', t => {
-  const socket = Socket('http://localhost:8110/mock')
+test.cb('mock > namespace is /mock', t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
+  })
   let connected = false
   socket.on('connect', () => {
     connected = true
   })
   socket.on('message', msg => {
     t.is(connected, true)
-    if(msg ==='Hello again') {
-      t.end()
-      socket.close()
-    } else {
-      t.is(msg, 'Hello in mock')
-    }
+    t.is(msg, 'Hello in mock')
+    t.end()
+    socket.close()
   })
 })
 
-test.cb('echo to each socket', t => {
-  const socket = Socket('http://localhost:8110/mock')
+test.cb('mock > echo to each socket', t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
+  })
   socket.on('connect', () => {
     socket.emit(':echo', 'Hello World!!')
   })
@@ -46,46 +59,31 @@ test.cb('echo to each socket', t => {
   })
 })
 
-test.cb('ack', t => {
-  const socket = Socket('http://localhost:8110/mock')
-  socket.emit(':ack', 'Hello World!!', (err: Error, msg: string) => {
-    if(err) {
-      console.log(err.message)
-      t.fail()
-    } else {
-      t.is(msg, 'Hello World!!')
-    }
-    socket.close()
-    t.end()
+test('mock > ack', async t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
   })
-})
-
-test.cb('ack > async', t => {
-  const socket = Socket('http://localhost:8110/mock')
-  socket.emit(':ack.async', 'Hello World!!', (err: Error, msg: string) => {
-    if(err) {
-      t.fail()
-    } else {
-      t.is(msg, 'Hello World!!')
-    }
-    socket.close()
-    t.end()
-  })
-})
-
-test('ack > async2', async t => {
-  const socket = Socket('http://localhost:8110/mock')
   const msg = await p(socket.emit, socket)(':ack', 'Hello World!!')
   t.is(msg, 'Hello World!!')
   socket.close()
 })
 
-test.cb('auth > on and off level01', t => {
+test('mock > ack.async', async t => {
   const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
+  })
+  const msg = await p(socket.emit, socket)(':ack.async', 'Hello World!!')
+  t.is(msg, 'Hello World!!')
+  socket.close()
+})
+
+test.cb('mock > auth > on and off level01', t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
     transportOptions: {
       polling: {
         extraHeaders: {
-          token: 'level01'
+          'x-access-token': sign({permissions: ['level01']}, cf.jwtConfig.secret, cf.jwtConfig.options)
         },
       },
     },
@@ -121,12 +119,13 @@ test.cb('auth > on and off level01', t => {
   })
 })
 
-test.cb('auth > on and off level02', t => {
+test.cb('mock > auth > on and off level02', t => {
   const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
     transportOptions: {
       polling: {
         extraHeaders: {
-          token: 'level02'
+          'x-access-token': sign({permissions: ['level02']}, cf.jwtConfig.secret, cf.jwtConfig.options)
         },
       },
     },
@@ -193,8 +192,10 @@ test.cb('auth > on and off level02', t => {
   })
 })
 
-test.cb('@Use > order', t => {
-  const socket = Socket('http://localhost:8110/mock')
+test.cb('mock > @Use() order', t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
+  })
   socket.emit(':use.order', (err: Error, ...track: string[]) => {
     if(err) {
       t.fail()
@@ -206,70 +207,135 @@ test.cb('@Use > order', t => {
   })
 })
 
-test.cb('error > in @Use()', t => {
+test.cb('mock > error > in @Use()', t => {
   const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
     transportOptions: {
       polling: {
         extraHeaders: {
-          token: 'bad token',
+          'x-access-token': 'bad token',
         },
       },
     },
   })
   socket.on('error', (err: string) => {
-    t.is(err, 'bad token')
+    t.is(err, 'Unauthorized: jwt malformed')
     socket.close()
     t.end()
   })
 })
 
-test.cb('error > in @On()', t => {
-  const socket = Socket('http://localhost:8110/mock')
-  socket.emit(':ack', 'error', (err: Error, msg: string) => {
-    if(err) {
-      t.is(err.message, 'error')
-    } else {
-      t.fail()
-    }
-    socket.close()
-    t.end()
+test('mock > error > in @On()', async t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
   })
+  try {
+    const res = await p(socket.emit, socket)(':ack', 'error')
+  } catch(e) {
+    const err = e as ErrorWithStatusCode
+    t.is(err.status, 500)
+    t.is(err.message, 'error')
+  }
+  socket.close()
 })
 
-test.cb('error > in @On() async', t => {
-  const socket = Socket('http://localhost:8110/mock')
-  socket.emit(':ack.async', 'error', (err: Error, msg: string) => {
-    if(err) {
-      t.is(err.message, 'error')
-    } else {
-      t.fail()
-    }
-    socket.close()
-    t.end()
+test('mock > error > in @On() async', async t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
   })
+  try {
+    const res = await p(socket.emit, socket)(':ack.async', 'error')
+  } catch(e) {
+    const err: ErrorWithStatusCode = e as ErrorWithStatusCode
+    t.is(err.status, 500)
+    t.is(err.message, 'error')
+  }
+  socket.close()
 })
 
-test.cb('error > not found', t => {
-  const socket = Socket('http://localhost:8110/mock')
-  socket.emit(':notfound', 'error', (err: Error, msg: string) => {
-    if(err) {
-      t.is(err.message, 'not found event')
-    } else {
-      t.fail()
-    }
-    socket.close()
-    t.end()
+test('mock > error > unauthorized 401', async t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
   })
+  try {
+    const res = await p(socket.emit, socket)(':auth.level01', 'on')
+  } catch(e) {
+    const err: ErrorWithStatusCode = e as ErrorWithStatusCode
+    t.is(err.status, 401)
+    t.is(err.message, 'Unauthorized: denied')
+  }
 })
 
-test('error > not found & async', async t => {
-  const socket = Socket('http://localhost:8110/mock')
+test('mock > error > bad request 400', async t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
+    transportOptions: {
+      polling: {
+        extraHeaders: {
+          'x-access-token': sign({permissions: ['level01']}, cf.jwtConfig.secret, cf.jwtConfig.options)
+        },
+      },
+    },
+  })
+  try {
+    const res = await p(socket.emit, socket)(':auth.level01', 'wrong')
+  } catch(e) {
+    const err: ErrorWithStatusCode = e as ErrorWithStatusCode
+    t.is(err.message, 'Bad Request: bad query')
+    t.is(err.status, 400)
+  }
+})
+
+test('mock > error > not found 404', async t => {
+  const socket = Socket('http://localhost:8110/mock', {
+    path: '/test',
+  })
   try {
     const res = await p(socket.emit, socket)(':notfound')
-    t.fail()
-  } catch(err) {
-    t.is(err.message, 'not found event')
-  } finally {
-    socket.close()
+  } catch(e) {
+    const err: ErrorWithStatusCode = e as ErrorWithStatusCode
+    t.is(err.status, 404)
+    t.is(err.message, 'Not Found: not found event')
   }
+  socket.close()
+})
+
+
+test.cb('mock2 > namespace is /mock2', t => {
+  const socket = Socket('http://localhost:8110/mock2', {
+    path: '/test',
+  })
+  let connected = false
+  socket.on('connect', () => {
+    connected = true
+  })
+  socket.on('message', msg => {
+    t.is(connected, true)
+    t.is(msg, 'Hello in mock2')
+    socket.close()
+    t.end()
+  })
+})
+
+test.cb('mock2 > echo to each socket', t => {
+  const socket = Socket('http://localhost:8110/mock2', {
+    path: '/test',
+  })
+  socket.on('connect', () => {
+    socket.emit(':echo', 'Hello, Mock2')
+  })
+  socket.on(':echo', (...args) => {
+    t.deepEqual(args, ['Hello, Mock2'])
+    socket.close()
+    t.end()
+  })
+})
+
+test('mock2 > ack', async t => {
+  const socket = Socket('http://localhost:8110/mock2', {
+    path: '/test',
+  })
+  const msg = await p(socket.emit, socket)(':ack', 'Hello World!!')
+  t.is(msg, 'Hello World!!')
+  socket.close()
 })
