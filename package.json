@@ -1,6 +1,6 @@
 {
   "name": "socket.io-decorator",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Socket.IO with Decorator",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,7 +32,6 @@
   "devDependencies": {
     "@types/fs-extra": "^5.0.4",
     "@types/glob": "^7.1.1",
-    "@types/lodash": "^4.14.120",
     "@types/node": "^9.6.7",
     "@types/socket.io-client": "^1.4.32",
     "ava": "^1.1.0",
@@ -48,7 +47,6 @@
     "@types/socket.io": "^2.1.2",
     "fourdollar.logger": "^1.0.4",
     "jsonwebtoken": "^8.4.0",
-    "lodash": "^4.17.11",
     "socket.io": "^2.2.0"
   },
   "ava": {

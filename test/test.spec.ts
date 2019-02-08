@@ -21,11 +21,10 @@ import * as cf from '../src/config'
 const io = IO(8110, {
   path: '/test',
 })
-const mock2 = new Mock2Space(io.of('mock2'))
 const mock = new MockSpace(io.of('mock'))
+const mock2 = new Mock2Space(io.of('mock2'))
 
 test.after(() => {
-  console.log('closed!!!!!!!!!!!!!!!!!!!!!')
   io.close()
 })
 

@@ -3,10 +3,6 @@ import {
   Namespace,
   Socket,
 } from 'socket.io'
-import {
-  snakeCase,
-} from 'lodash' 
-import { on } from 'cluster';
 
 
 export {Server, Namespace, Socket}
@@ -47,11 +43,6 @@ function newOnCollection(): OnCollection {
 }
 
 export class BaseNamespace {
-  // private _useList: {callback: Middleware|string, index: number}[]
-  // private _onList: {event: string, callback: string , wrappers?: SocketWrapper[]}[] 
-  // private _onconnectList: (ConnectCallback | string)[]
-  // private _ondisconnectList: (DisconnectCallback | string)[]
-
   constructor(readonly namespace: Namespace) {
     const ons = this._inheritOnCollection()
 
