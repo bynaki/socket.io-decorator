@@ -1,6 +1,6 @@
 {
   "name": "socket.io-decorator",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Socket.IO with Decorator",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
