@@ -14,7 +14,7 @@
   },
   "license": "MIT",
   "config": {
-    "srcMain": "src/index.ts"
+    "srcMain": "src/server.ts"
   },
   "scripts": {
     "name": "echo $npm_package_name",
@@ -22,6 +22,7 @@
     "dev": "npm run build.tsc && npm start",
     "build.tsc": "tsc && bin/copy \"src/**/!(*.ts)\" \"dist\"",
     "build.parcel": "parcel build --target=node \"$npm_package_config_srcMain\" && bin/copy \"src/**/!(*.ts)\" \"dist\"",
+    "build.parcel.debug": "parcel build --no-minify --no-source-maps --no-cache --target=node \"$npm_package_config_srcMain\" && bin/copy \"src/**/!(*.ts)\" \"dist\" \"**/node_modules/**\"",
     "clean": "rimraf dist",
     "build.util": "tsc --outDir utils utils/index.ts",
     "build.test": "tsc -p tsconfig.test.json && bin/copy \"src/**/!(*.ts)\" \"dist.test/src\"",
